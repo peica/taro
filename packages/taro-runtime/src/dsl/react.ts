@@ -11,27 +11,28 @@ import { options } from '../options'
 import { Reconciler } from '../reconciler'
 import { incrementId } from '../utils'
 
-function isClassComponent (R: typeof React, component): boolean {
-  return isFunction(component.render) ||
-  !!component.prototype?.isReactComponent ||
-  component.prototype instanceof R.Component // compat for some others react-like library
+function isClassComponent(R: typeof React, component): boolean {
+  return (
+    isFunction(component.render) ||
+    !!component.prototype?.isReactComponent ||
+    component.prototype instanceof R.Component
+  ) // compat for some others react-like library
 }
 
-export function connectReactPage (
-  R: typeof React,
-  id: string
-) {
+export function connectReactPage(R: typeof React, id: string) {
   const h = R.createElement
   return (component: ReactPageComponent): React.ComponentClass<PageProps> => {
     // eslint-disable-next-line dot-notation
     const isReactComponent = isClassComponent(R, component)
 
     const inject = (node?: Instance) => node && injectPageInstance(node, id)
-    const refs = isReactComponent ? { ref: inject } : {
-      forwardedRef: inject,
-      // 兼容 react-redux 7.20.1+
-      reactReduxForwardedRef: inject
-    }
+    const refs = isReactComponent
+      ? { ref: inject }
+      : {
+          forwardedRef: inject,
+          // 兼容 react-redux 7.20.1+
+          reactReduxForwardedRef: inject,
+        }
 
     if (PageContext === EMPTY_OBJ) {
       PageContext = R.createContext('')
@@ -39,42 +40,38 @@ export function connectReactPage (
 
     return class Page extends R.Component<PageProps, { hasError: boolean }> {
       state = {
-        hasError: false
+        hasError: false,
       }
 
-      static getDerivedStateFromError (error: Error) {
+      static getDerivedStateFromError(error: Error) {
         console.warn(error)
         return { hasError: true }
       }
 
       // React 16 uncaught error 会导致整个应用 crash，
       // 目前把错误缩小到页面
-      componentDidCatch (error: Error, info: React.ErrorInfo) {
+      componentDidCatch(error: Error, info: React.ErrorInfo) {
         console.warn(error)
         console.error(info.componentStack)
       }
 
-      render () {
+      render() {
         const children = this.state.hasError
           ? []
-          : h(PageContext.Provider, { value: id }, h(component, {
-            ...this.props,
-            ...refs
-          }))
+          : h(
+              PageContext.Provider,
+              { value: id },
+              h(component, {
+                ...this.props,
+                ...refs,
+              })
+            )
 
         if (isBrowser) {
-          return h(
-            'div',
-            { id, className: 'taro_page' },
-            children
-          )
+          return h('div', { id, className: 'taro_page' }, children)
         }
 
-        return h(
-          'root',
-          { id },
-          children
-        )
+        return h('root', { id }, children)
       }
     }
   }
@@ -88,9 +85,9 @@ let ReactDOM
 
 type PageComponent = React.CElement<PageProps, React.Component<PageProps, any, any>>
 
-function setReconciler () {
+function setReconciler() {
   const hostConfig: Reconciler<React.FunctionComponent<PageProps> | React.ComponentClass<PageProps>> = {
-    getLifecyle (instance, lifecycle) {
+    getLifecyle(instance, lifecycle) {
       if (lifecycle === 'onShow') {
         lifecycle = 'componentDidShow'
       } else if (lifecycle === 'onHide') {
@@ -98,18 +95,18 @@ function setReconciler () {
       }
       return instance[lifecycle] as Function
     },
-    mergePageInstance (prev, next) {
+    mergePageInstance(prev, next) {
       if (!prev || !next) return
 
       // 子组件使用 lifecycle hooks 注册了生命周期后，会存在 prev，里面是注册的生命周期回调。
-      Object.keys(prev).forEach(item => {
+      Object.keys(prev).forEach((item) => {
         if (isFunction(next[item])) {
           next[item] = [next[item], ...prev[item]]
         } else {
           next[item] = [...(next[item] || []), ...prev[item]]
         }
       })
-    }
+    },
   }
 
   if (isBrowser) {
@@ -136,10 +133,10 @@ function setReconciler () {
 
 const pageKeyId = incrementId()
 
-export function createReactApp (App: React.ComponentClass, react: typeof React, reactdom, config: AppConfig) {
+export function createReactApp(App: React.ComponentClass, react: typeof React, reactdom, config: AppConfig) {
   R = react
   ReactDOM = reactdom
-  ensure(!!ReactDOM, '构建 React/Nerv 项目请把 process.env.FRAMEWORK 设置为 \'react\'/\'nerv\' ')
+  ensure(!!ReactDOM, "构建 React/Nerv 项目请把 process.env.FRAMEWORK 设置为 'react'/'nerv' ")
 
   const ref = R.createRef<ReactAppInstance>()
   const isReactComponent = isClassComponent(R, App)
@@ -153,17 +150,17 @@ export function createReactApp (App: React.ComponentClass, react: typeof React, 
     private pages: Array<() => PageComponent> = []
     private elements: Array<PageComponent> = []
 
-    public mount (component: React.ComponentClass<PageProps>, id: string, cb: () => void) {
+    public mount(component: React.ComponentClass<PageProps>, id: string, cb: () => void) {
       const key = id + pageKeyId()
       const page = () => R.createElement(component, { key, tid: id })
       this.pages.push(page)
       this.forceUpdate(cb)
     }
 
-    public unmount (id: string, cb: () => void) {
+    public unmount(id: string, cb: () => void) {
       for (let i = 0; i < this.elements.length; i++) {
         const element = this.elements[i]
-        if (element.key === id) {
+        if (element.props.tid === id) {
           this.elements.splice(i, 1)
           break
         }
@@ -172,7 +169,7 @@ export function createReactApp (App: React.ComponentClass, react: typeof React, 
       this.forceUpdate(cb)
     }
 
-    public render () {
+    public render() {
       while (this.pages.length > 0) {
         const page = this.pages.pop()!
         this.elements.push(page())
@@ -192,67 +189,70 @@ export function createReactApp (App: React.ComponentClass, react: typeof React, 
     }
   }
 
-  const app: AppInstance = Object.create({
-    render (cb: () => void) {
-      wrapper.forceUpdate(cb)
-    },
+  const app: AppInstance = Object.create(
+    {
+      render(cb: () => void) {
+        wrapper.forceUpdate(cb)
+      },
 
-    mount (component: ReactPageComponent, id: string, cb: () => void) {
-      const page = connectReactPage(R, id)(component)
-      wrapper.mount(page, id, cb)
-    },
+      mount(component: ReactPageComponent, id: string, cb: () => void) {
+        const page = connectReactPage(R, id)(component)
+        wrapper.mount(page, id, cb)
+      },
 
-    unmount (id: string, cb: () => void) {
-      wrapper.unmount(id, cb)
+      unmount(id: string, cb: () => void) {
+        wrapper.unmount(id, cb)
+      },
+    },
+    {
+      config: {
+        writable: true,
+        enumerable: true,
+        configurable: true,
+        value: config,
+      },
+
+      onLaunch: {
+        enumerable: true,
+        value(options) {
+          // eslint-disable-next-line react/no-render-return-value
+          wrapper = ReactDOM.render(R.createElement(AppWrapper), document.getElementById('app'))
+          const app = ref.current
+          Current.router = {
+            params: options?.query,
+            ...options,
+          }
+          if (app != null && isFunction(app.onLaunch)) {
+            app.onLaunch(options)
+          }
+        },
+      },
+
+      onShow: {
+        enumerable: true,
+        value(options) {
+          const app = ref.current
+          Current.router = {
+            params: options?.query,
+            ...options,
+          }
+          if (app != null && isFunction(app.componentDidShow)) {
+            app.componentDidShow(options)
+          }
+        },
+      },
+
+      onHide: {
+        enumerable: true,
+        value(options: unknown) {
+          const app = ref.current
+          if (app != null && isFunction(app.componentDidHide)) {
+            app.componentDidHide(options)
+          }
+        },
+      },
     }
-  }, {
-    config: {
-      writable: true,
-      enumerable: true,
-      configurable: true,
-      value: config
-    },
-
-    onLaunch: {
-      enumerable: true,
-      value (options) {
-        // eslint-disable-next-line react/no-render-return-value
-        wrapper = ReactDOM.render(R.createElement(AppWrapper), document.getElementById('app'))
-        const app = ref.current
-        Current.router = {
-          params: options?.query,
-          ...options
-        }
-        if (app != null && isFunction(app.onLaunch)) {
-          app.onLaunch(options)
-        }
-      }
-    },
-
-    onShow: {
-      enumerable: true,
-      value (options) {
-        const app = ref.current
-        Current.router = {
-          params: options?.query,
-          ...options
-        }
-        if (app != null && isFunction(app.componentDidShow)) {
-          app.componentDidShow(options)
-        }
-      }
-    },
-
-    onHide: {
-      enumerable: true,
-      value (options: unknown) {
-        const app = ref.current
-        if (app != null && isFunction(app.componentDidHide)) {
-          app.componentDidHide(options)
-        }
-      }
-    }
-  })
+  )
 
   Current.app = app
   return Current.app
